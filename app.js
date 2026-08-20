@@ -1,171 +1,61 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.112.3";
+const supabase=createClient("https://uspndiasqerdypsfqofl.supabase.co","sb_publishable_pakYKjwYUZ5VbmEMV6k-vQ_mNw-Caik");
+const $=s=>document.querySelector(s);
+const state={session:null,profile:null,projects:[],logs:[],attachments:[],calendarDate:new Date(),openId:null,view:"dashboard"};
+const roleLabels={engineering:"Gestor de Engenharia",production:"Gestor de Produção",designer:"Projetista",maintenance:"Manutenção · visualização",director:"Diretoria · visualização",admin:"Administrador · acesso total"};
+const stageLabels={pending_approval:"Aguardando aprovação",awaiting_estimate:"Aguardando estimativa",workflow:"Em fluxo",rejected:"Recusado"};
+const flowStatuses=["Aprovado","Em desenvolvimento","Aguardando informações","Em validação","Concluído"];
+const canOrder=()=>["engineering","production","designer","admin"].includes(state.profile?.role);
+const canEdit=()=>["engineering","production","admin"].includes(state.profile?.role);
+const canWork=()=>["designer","admin"].includes(state.profile?.role);
+const isManager=()=>["engineering","production","admin"].includes(state.profile?.role);
+const canAttach=()=>["engineering","production","designer","admin"].includes(state.profile?.role);
+const esc=(v="")=>String(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
+const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+const dateBR=d=>d?new Intl.DateTimeFormat("pt-BR").format(new Date(`${d}T12:00:00`)):"—";
+const dateTimeBR=d=>new Intl.DateTimeFormat("pt-BR",{dateStyle:"short",timeStyle:"short"}).format(new Date(d));
+const projectCode=id=>`PRJ-${String(id).padStart(4,"0")}`;
+function toast(m,e=false){const x=$("#toast");x.textContent=m;x.className=`toast show${e?" error":""}`;clearTimeout(toast.timer);toast.timer=setTimeout(()=>x.className="toast",3300)}
+function setBusy(b,on,label="Aguarde…"){if(!b)return;if(on){b.dataset.label=b.textContent;b.textContent=label;b.disabled=true}else{b.textContent=b.dataset.label||b.textContent;b.disabled=false}}
+function errorMessage(e,f="Não foi possível concluir a operação."){toast(e?.message||f,true)}
+function priorityClass(p){return p==="Crítica"?"critical":p==="Alta"?"high":""}
+function pendingProjects(){if(state.profile?.role==="admin")return state.projects.filter(p=>["pending_approval","awaiting_estimate"].includes(p.stage));if(isManager())return state.projects.filter(p=>p.stage==="pending_approval");if(canWork())return state.projects.filter(p=>p.stage==="awaiting_estimate");return[]}
 
-const SUPABASE_URL = "https://uspndiasqerdypsfqofl.supabase.co";
-const SUPABASE_KEY = "sb_publishable_pakYKjwYUZ5VbmEMV6k-vQ_mNw-Caik";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+async function submitRequest(form,dialog=null){const b=form.querySelector('[type="submit"],button[value="default"]');setBusy(b,true,"Enviando…");const d=Object.fromEntries(new FormData(form));const{error}=await supabase.rpc("fluxo_submit_request",{p_title:d.title,p_requester:d.requester||"",p_area:d.area||"",p_description:d.description,p_impact:d.impact||"",p_priority:d.priority,p_due_date:d.due_date});setBusy(b,false);if(error)return errorMessage(error);form.reset();form.querySelector('[name="priority"]').value="Média";dialog?.close();toast(state.session?"Projeto criado e encaminhado para estimativa.":"Solicitação enviada para revisão.");if(state.session)await loadData()}
+async function loadData(){const[pr,lr,ar]=await Promise.all([supabase.from("fluxo_projects").select("*").order("position").order("created_at"),supabase.from("fluxo_logs").select("*").order("created_at",{ascending:false}),supabase.from("fluxo_attachments").select("*").order("created_at",{ascending:false})]);if(pr.error)return errorMessage(pr.error,"Não foi possível atualizar os projetos.");state.projects=pr.data||[];state.logs=lr.data||[];state.attachments=ar.data||[];render()}
 
-const $ = (selector) => document.querySelector(selector);
-const state = { session: null, profile: null, projects: [], logs: [], attachments: [], calendarDate: new Date(), openId: null };
-const labels = {
-  engineering: "Gestor de Engenharia", production: "Gestor de Produção", designer: "Projetista",
-  maintenance: "Manutenção · visualização", director: "Diretoria · visualização", admin: "Administrador · acesso total"
-};
-const stageLabels = { pending_approval: "Aguardando aprovação", awaiting_estimate: "Aguardando estimativa", workflow: "Em fluxo", rejected: "Recusado" };
-const canManage = () => ["engineering", "production", "designer", "admin"].includes(state.profile?.role);
-const isManager = () => ["engineering", "production", "admin"].includes(state.profile?.role);
-const esc = (value = "") => String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
-const isoToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-const formatDate = (date) => date ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`)) : "—";
-const formatDateTime = (date) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(date));
+function render(){const workflow=state.projects.filter(p=>p.stage==="workflow"),pending=pendingProjects();const stats=[["Total em aberto",workflow.filter(p=>p.status!=="Concluído").length,"dashboard"],["Alta ou crítica",workflow.filter(p=>["Alta","Crítica"].includes(p.priority)&&p.status!=="Concluído").length,"dashboard"],["Em execução",workflow.filter(p=>p.status==="Em desenvolvimento").length,"kanban"],[state.profile?.role==="designer"?"Aguardando estimativa":"Ações pendentes",pending.length,"pending"]];$("#stats").innerHTML=stats.map(([l,n,v])=>`<button class="stat" data-stat-view="${v}"><span>${l}</span><b>${n}</b></button>`).join("");document.querySelectorAll("[data-stat-view]").forEach(b=>b.onclick=()=>switchView(b.dataset.statView));$("#pendingBadge").textContent=pending.length;$("#pendingBadge").classList.toggle("hidden",!pending.length);$("#pendingNav").classList.toggle("hidden",!["engineering","production","designer","admin"].includes(state.profile?.role));$("#alertBox").classList.toggle("hidden",!pending.length);$("#alertBox").innerHTML=pending.length?`<button class="alert-action" id="openPending"><b>${pending.length} ${pending.length===1?"ação pendente":"ações pendentes"}.</b> Clique para abrir a lista e concluir agora →</button>`:"";$("#openPending")?.addEventListener("click",()=>switchView("pending"));renderQueue();renderPending();renderKanban();renderCalendar()}
+function queueProjects(){const q=$("#searchInput").value.trim().toLowerCase(),f=$("#stageFilter").value;return state.projects.filter(p=>(f?p.stage===f:p.stage==="workflow")&&(!q||[p.title,p.requester,p.area,projectCode(p.id)].join(" ").toLowerCase().includes(q)))}
+function renderQueue(){const ps=queueProjects();$("#dragHint").classList.toggle("hidden",!canOrder());$("#projectList").innerHTML=ps.length?ps.map(queueRow).join(""):`<div class="empty"><b>Nenhum projeto encontrado.</b><br>As demandas liberadas aparecerão aqui.</div>`;wireProjectButtons();setupDragging()}
+function queueRow(p){const drag=canOrder()&&p.stage==="workflow";return`<article class="project-card" draggable="${drag}" data-id="${p.id}"><div class="drag-handle" title="Arrastar"><span>☷</span><b class="order-number">${p.position}</b></div><div class="project-main"><h3>${esc(p.title)}</h3><p>#${projectCode(p.id)} · ${esc(p.requester||"Solicitante não informado")}</p></div><div class="meta"><span>Área</span><b>${esc(p.area||"Não informada")}</b></div><div class="meta optional-meta"><span>Vencimento</span><b>${dateBR(p.due_date)}</b></div><div><span class="pill ${priorityClass(p.priority)}">${esc(p.priority)}</span><div class="progress-mini"><i style="width:${p.progress}%"></i></div></div><button class="open-project" data-id="${p.id}" title="Editar ou visualizar">✎</button></article>`}
+function setupDragging(){let dragged=null;document.querySelectorAll('.project-card[draggable="true"]').forEach(card=>{card.ondragstart=()=>{dragged=card;card.classList.add("dragging")};card.ondragend=async()=>{card.classList.remove("dragging");if(!dragged)return;dragged=null;await saveOrder()};card.ondragover=e=>{e.preventDefault();if(!dragged||card===dragged)return;const box=card.getBoundingClientRect();card.parentNode.insertBefore(dragged,e.clientY<box.top+box.height/2?card:card.nextSibling)}})}
+async function saveOrder(){const visible=[...document.querySelectorAll('.project-card[draggable="true"]')].map(el=>Number(el.dataset.id));if(!visible.length)return;const ordered=[...state.projects.filter(p=>p.stage==="workflow")].sort((a,b)=>a.position-b.position),set=new Set(visible);let cursor=0;const ids=ordered.map(p=>set.has(p.id)?visible[cursor++]:p.id);const results=await Promise.all(ids.map((id,i)=>supabase.from("fluxo_projects").update({position:i+1}).eq("id",id)));if(results.some(r=>r.error))return toast("Não foi possível salvar a nova ordem.",true);toast("Ordem numérica atualizada.");await loadData()}
+function renderPending(){const items=pendingProjects(),title=state.profile?.role==="designer"?"Estimativas pendentes":isManager()&&state.profile?.role!=="admin"?"Aprovações pendentes":"Ações pendentes";$("#pendingTitle").textContent=title;$("#pendingList").innerHTML=items.length?items.map(p=>`<article class="pending-card"><div><span class="pill ${priorityClass(p.priority)}">${esc(p.priority)}</span><h3>${esc(p.title)}</h3><p>${esc(p.requester||"Solicitante não informado")}${p.area?` · ${esc(p.area)}`:""}</p><p>${esc(p.description)}</p><small>Prazo: ${dateBR(p.due_date)} · ${stageLabels[p.stage]}</small></div><button class="button primary open-project" data-id="${p.id}">${p.stage==="pending_approval"?"Revisar e aprovar":"Informar horas"}</button></article>`).join(""):`<div class="empty"><b>Nenhuma ação pendente.</b><br>Você está em dia.</div>`;wireProjectButtons()}
+function renderKanban(){const cols=[["Fila aprovada",["Aprovado","Aguardando informações"]],["Em execução",["Em desenvolvimento"]],["Validação",["Em validação"]],["Concluídos",["Concluído"]]],flow=state.projects.filter(p=>p.stage==="workflow");$("#kanbanBoard").innerHTML=cols.map(([title,statuses])=>{const items=flow.filter(p=>statuses.includes(p.status));return`<section class="kanban-column"><div class="kanban-column-head"><span>${title}</span><b>${items.length}</b></div><div class="kanban-stack">${items.length?items.map(kanbanCard).join(""):`<div class="kanban-empty">Vazio</div>`}</div></section>`}).join("");wireProjectButtons();document.querySelectorAll(".advance-project").forEach(b=>b.onclick=()=>advanceProject(Number(b.dataset.id)))}
+function kanbanCard(p){const next=nextStatus(p.status);return`<article class="kanban-card"><span class="pill ${priorityClass(p.priority)}">${esc(p.priority)}</span><h3>${esc(p.title)}</h3><p>#${projectCode(p.id)} · ${esc(p.area||"Área não informada")}</p><p>${dateBR(p.due_date)} · ${p.estimated_hours||"—"}h</p><div class="kanban-actions"><button class="open-project" data-id="${p.id}">✎ Editar</button>${canOrder()&&next?`<button class="advance advance-project" data-id="${p.id}">▶ Avançar fase</button>`:""}</div></article>`}
+function nextStatus(s){return{"Aprovado":"Em desenvolvimento","Aguardando informações":"Em desenvolvimento","Em desenvolvimento":"Em validação","Em validação":"Concluído"}[s]||null}
+async function advanceProject(id){const p=state.projects.find(x=>x.id===id),next=p&&nextStatus(p.status);if(!next)return;const progress={"Em desenvolvimento":25,"Em validação":75,"Concluído":100}[next]||p.progress;const{error}=await supabase.from("fluxo_projects").update({status:next,progress}).eq("id",id);if(error)return errorMessage(error);toast(`Projeto movido para “${next}”.`);await loadData()}
+function wireProjectButtons(){document.querySelectorAll(".open-project").forEach(b=>b.onclick=()=>openProject(Number(b.dataset.id)))}
 
-function toast(message, error = false) {
-  const el = $("#toast"); el.textContent = message; el.className = `toast show${error ? " error" : ""}`;
-  clearTimeout(toast.timer); toast.timer = setTimeout(() => el.className = "toast", 3200);
+function field(label,name,value,type="text",options="",disabled=false,span=false){const cls=span?' class="span-2"':'';if(type==="textarea")return`<label${cls}>${label}<textarea name="${name}" rows="3" ${disabled?"disabled":""}>${esc(value)}</textarea></label>`;if(type==="select")return`<label${cls}>${label}<select name="${name}" ${disabled?"disabled":""}>${options}</select></label>`;return`<label${cls}>${label}<input name="${name}" type="${type}" value="${esc(value??"")}" ${disabled?"disabled":""}></label>`}
+function openProject(id){const p=state.projects.find(x=>x.id===id);if(!p)return;state.openId=id;const editable=canEdit()&&p.stage!=="rejected";$("#projectModalOverline").textContent=`#${projectCode(p.id)} · ${stageLabels[p.stage]}`;$("#projectModalTitle").textContent=p.title;$("#projectFields").innerHTML=field("Título","title",p.title,"text","",!editable,true)+field("Solicitante","requester",p.requester,"text","",!editable)+field("Área","area",p.area,"text","",!editable)+field("Descrição","description",p.description,"textarea","",!editable,true)+field("Impacto","impact",p.impact,"textarea","",!editable,true)+field("Prioridade","priority",p.priority,"select",["Baixa","Média","Alta","Crítica"].map(v=>`<option ${v===p.priority?"selected":""}>${v}</option>`).join(""),!editable)+field("Prazo previsto","due_date",p.due_date,"date","",!editable);$("#projectSaveBtn").classList.toggle("hidden",!editable);$("#projectSaveBtn").textContent=p.stage==="pending_approval"?"Revisar e aprovar":"Salvar alterações";$("#deleteProjectBtn").classList.toggle("hidden",!canEdit());$("#projectExtra").innerHTML=extrasTemplate(p);wireExtras(p);$("#projectDialog").showModal()}
+function extrasTemplate(p){const logs=state.logs.filter(l=>l.project_id===p.id),files=state.attachments.filter(a=>a.project_id===p.id);const estimate=canWork()&&p.stage==="awaiting_estimate"?`<div class="detail-block action-highlight"><h3>Horas previstas para desenvolvimento</h3><p>O projeto somente entra na fila após esta informação.</p><form id="estimateForm" class="inline-form"><input name="hours" type="number" min="1" required placeholder="Ex.: 16"><button class="button primary" type="submit">Liberar no fluxo</button></form></div>`:"";const reject=isManager()&&p.stage==="pending_approval"?`<div class="detail-block"><button id="rejectProject" class="button danger" type="button">Recusar solicitação</button></div>`:"";const status=canOrder()&&p.stage==="workflow"?`<div class="detail-block"><h3>Fase e progresso</h3><form id="statusForm" class="form-grid"><label>Status<select name="status">${flowStatuses.map(v=>`<option ${v===p.status?"selected":""}>${v}</option>`).join("")}</select></label><label>Progresso (%)<input name="progress" type="number" min="0" max="100" value="${p.progress}"></label><div class="span-2 phase-actions"><button class="button ghost" type="submit">Atualizar andamento</button>${nextStatus(p.status)?`<button id="advanceModal" class="button primary" type="button">▶ Passar de fase</button>`:""}</div></form></div>`:"";const logForm=canWork()?`<form id="logForm" class="inline-form"><input name="message" maxlength="1000" required placeholder="Informação aguardada ou próxima etapa"><button class="button primary" type="submit">Adicionar</button></form>`:"";const fileForm=canAttach()?`<form id="attachmentForm" class="inline-form optional-upload"><input name="file" type="file" accept="application/pdf,.pdf"><button class="button ghost" type="submit">Anexar PDF</button></form><small>Opcional · PDF de até 8 MB.</small>`:"";return`${estimate}${reject}${status}<div class="detail-block"><h3>Planejamento</h3><p><b>${p.estimated_hours?`${p.estimated_hours} hora(s) previstas`:"Horas ainda não informadas"}</b> · ${esc(p.status)} · ${p.progress}%</p></div><div class="detail-block"><h3>Acompanhamento</h3>${logForm}<div class="log-list">${logs.length?logs.map(l=>`<div class="log-item">${esc(l.message)}<small>${esc(l.author_name)} · ${dateTimeBR(l.created_at)}</small></div>`).join(""):`<small>Nenhum registro.</small>`}</div></div><div class="detail-block"><h3>Arquivos PDF</h3>${fileForm}<div class="attachment-list">${files.length?files.map(a=>`<button type="button" class="attachment-item open-file" data-path="${esc(a.object_path)}">📄 ${esc(a.file_name)}</button>`).join(""):`<small>Nenhum arquivo anexado. Isso não impede o avanço do projeto.</small>`}</div></div>`}
+function wireExtras(p){
+  $("#estimateForm")?.addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,b=form.querySelector("button"),hours=Number(new FormData(form).get("hours"));if(!hours||hours<1)return toast("Informe uma quantidade válida de horas.",true);setBusy(b,true,"Liberando…");const{error}=await supabase.from("fluxo_projects").update({estimated_hours:hours,stage:"workflow"}).eq("id",p.id);setBusy(b,false);if(error)return errorMessage(error);toast("Estimativa registrada. Projeto liberado no fluxo.");$("#projectDialog").close();switchView("dashboard");await loadData()});
+  $("#rejectProject")?.addEventListener("click",async()=>{if(!confirm("Recusar esta solicitação?"))return;const{error}=await supabase.from("fluxo_projects").update({stage:"rejected",status:"Recusado"}).eq("id",p.id);if(error)return errorMessage(error);toast("Solicitação recusada.");$("#projectDialog").close();await loadData()});
+  $("#statusForm")?.addEventListener("submit",async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget)),progress=Number(d.progress);const{error}=await supabase.from("fluxo_projects").update({status:d.status,progress:d.status==="Concluído"?100:progress}).eq("id",p.id);if(error)return errorMessage(error);toast("Andamento atualizado.");$("#projectDialog").close();await loadData()});
+  $("#advanceModal")?.addEventListener("click",async()=>{$("#projectDialog").close();await advanceProject(p.id)});
+  $("#logForm")?.addEventListener("submit",async e=>{e.preventDefault();const message=new FormData(e.currentTarget).get("message");const{error}=await supabase.from("fluxo_logs").insert({project_id:p.id,message,author_id:state.session.user.id,author_name:state.profile.display_name});if(error)return errorMessage(error);toast("Registro adicionado.");await loadData();openProject(p.id)});
+  $("#attachmentForm")?.addEventListener("submit",async e=>{e.preventDefault();const file=new FormData(e.currentTarget).get("file");if(!file||!file.size)return toast("Selecione um PDF ou continue sem anexar.",true);if(file.type!=="application/pdf")return toast("Selecione um arquivo PDF.",true);if(file.size>8388608)return toast("O PDF deve ter no máximo 8 MB.",true);const path=`${p.id}/${crypto.randomUUID()}.pdf`,upload=await supabase.storage.from("fluxo-project-pdfs").upload(path,file,{contentType:"application/pdf"});if(upload.error)return errorMessage(upload.error);const meta=await supabase.from("fluxo_attachments").insert({project_id:p.id,object_path:path,file_name:file.name,size_bytes:file.size,uploaded_by:state.session.user.id});if(meta.error){await supabase.storage.from("fluxo-project-pdfs").remove([path]);return errorMessage(meta.error)}toast("PDF anexado.");await loadData();openProject(p.id)});
+  document.querySelectorAll(".open-file").forEach(b=>b.onclick=async()=>{const{data,error}=await supabase.storage.from("fluxo-project-pdfs").createSignedUrl(b.dataset.path,120);if(error)return errorMessage(error);window.open(data.signedUrl,"_blank","noopener")})
 }
-function setBusy(button, busy, text = "Aguarde…") {
-  if (!button) return; if (busy) { button.dataset.label = button.textContent; button.textContent = text; button.disabled = true; }
-  else { button.textContent = button.dataset.label || button.textContent; button.disabled = false; }
-}
-function dueState(project) {
-  const days = Math.ceil((new Date(`${project.due_date}T23:59:59`) - new Date()) / 86400000);
-  return days < 0 ? `${Math.abs(days)}d atrasado` : days === 0 ? "Vence hoje" : `${days}d restantes`;
-}
+async function deleteOpenProject(){const p=state.projects.find(x=>x.id===state.openId);if(!p||!canEdit())return;if(!confirm(`Excluir definitivamente o projeto “${p.title}”?`))return;const b=$("#deleteProjectBtn");setBusy(b,true,"Excluindo…");const{error}=await supabase.from("fluxo_projects").delete().eq("id",p.id);setBusy(b,false);if(error)return errorMessage(error);toast("Projeto excluído.");$("#projectDialog").close();await loadData()}
+function renderCalendar(){const d=state.calendarDate,y=d.getFullYear(),m=d.getMonth();$("#calendarTitle").textContent=new Intl.DateTimeFormat("pt-BR",{month:"long",year:"numeric"}).format(d);const first=new Date(y,m,1),start=new Date(y,m,1-first.getDay()),cells=[];for(let i=0;i<42;i++){const day=new Date(start);day.setDate(start.getDate()+i);const iso=[day.getFullYear(),String(day.getMonth()+1).padStart(2,"0"),String(day.getDate()).padStart(2,"0")].join("-");const items=state.projects.filter(p=>p.due_date===iso&&p.stage!=="rejected");cells.push(`<div class="day ${day.getMonth()!==m?"muted":""}"><b>${day.getDate()}</b>${items.map(p=>`<button class="calendar-project open-project" data-id="${p.id}">${esc(p.title)}</button>`).join("")}</div>`)}$("#calendarGrid").innerHTML=cells.join("");wireProjectButtons()}
+function switchView(view){state.view=view;["dashboard","pending","kanban","calendar"].forEach(n=>$(`#${n}View`).classList.toggle("hidden",n!==view));$("#stats").classList.toggle("hidden",view==="calendar");document.querySelectorAll(".nav-item[data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));const copy={dashboard:["Fila de execução","Arraste os projetos para definir o que deve ser desenvolvido primeiro."],pending:[state.profile?.role==="designer"?"Estimativas pendentes":"Aprovações e pendências","Conclua as ações necessárias para cada projeto avançar."],kanban:["Quadro de atividades","Acompanhe cada projeto ao longo do fluxo."],calendar:["Calendário de vencimentos","Projetos organizados pela data de entrega."]};$("#pageTitle").textContent=copy[view][0];$("#pageSubtitle").textContent=copy[view][1]}
+async function establishSession(session){state.session=session;if(!session){state.profile=null;$("#publicView").classList.remove("hidden");$("#appView").classList.add("hidden");$("#loginBtn").classList.remove("hidden");$("#logoutBtn").classList.add("hidden");$("#userBadge").classList.add("hidden");return}const{data,error}=await supabase.from("fluxo_profiles").select("*").eq("user_id",session.user.id).single();if(error||!data){await supabase.auth.signOut();return toast("Este usuário não possui acesso ao sistema.",true)}state.profile=data;$("#publicView").classList.add("hidden");$("#appView").classList.remove("hidden");$("#loginBtn").classList.add("hidden");$("#logoutBtn").classList.remove("hidden");$("#userBadge").classList.remove("hidden");$("#userBadge").textContent=data.display_name;$("#roleTitle").textContent=roleLabels[data.role];$("#newInternalBtn").classList.toggle("hidden",!["engineering","production","designer","admin"].includes(data.role));switchView("dashboard");await loadData()}
 
-async function submitRequest(form, dialog = null) {
-  const button = form.querySelector('[type="submit"], button[value="default"]'); setBusy(button, true, "Enviando…");
-  const data = Object.fromEntries(new FormData(form));
-  const { error } = await supabase.rpc("fluxo_submit_request", {
-    p_title: data.title, p_requester: data.requester || "", p_area: data.area || "", p_description: data.description,
-    p_impact: data.impact || "", p_priority: data.priority, p_due_date: data.due_date
-  });
-  setBusy(button, false);
-  if (error) return toast(error.message, true);
-  form.reset(); form.querySelector('[name="priority"]').value = "Média";
-  if (dialog) dialog.close();
-  toast(state.session ? "Projeto criado e enviado ao projetista." : "Solicitação enviada para revisão.");
-  if (state.session) await loadData();
-}
-
-async function loadData() {
-  const [{ data: projects, error }, { data: logs }, { data: attachments }] = await Promise.all([
-    supabase.from("fluxo_projects").select("*").order("position").order("created_at"),
-    supabase.from("fluxo_logs").select("*").order("created_at", { ascending: false }),
-    supabase.from("fluxo_attachments").select("*").order("created_at", { ascending: false })
-  ]);
-  if (error) return toast("Não foi possível atualizar os projetos.", true);
-  state.projects = projects || []; state.logs = logs || []; state.attachments = attachments || [];
-  render();
-}
-
-function render() {
-  const projects = filteredProjects();
-  const counts = {
-    pending: state.projects.filter(p => p.stage === "pending_approval").length,
-    estimate: state.projects.filter(p => p.stage === "awaiting_estimate").length,
-    active: state.projects.filter(p => p.stage === "workflow" && p.status !== "Concluído").length,
-    late: state.projects.filter(p => p.stage === "workflow" && p.status !== "Concluído" && new Date(`${p.due_date}T23:59:59`) < new Date()).length
-  };
-  $("#stats").innerHTML = [["Aguardando aprovação",counts.pending],["Sem estimativa",counts.estimate],["Em andamento",counts.active],["Em atraso",counts.late]].map(([l,n]) => `<div class="stat"><span>${l}</span><b>${n}</b></div>`).join("");
-  const needs = state.profile?.role === "admin" ? counts.pending + counts.estimate : state.profile?.role === "designer" ? counts.estimate : isManager() ? counts.pending : 0;
-  $("#alertBox").classList.toggle("hidden", !needs);
-  $("#alertBox").innerHTML = needs ? `<b>${needs} ${needs === 1 ? "projeto precisa" : "projetos precisam"} da sua atenção.</b> ${state.profile.role === "designer" ? "Informe as horas previstas para liberar no fluxo." : state.profile.role === "admin" ? "Revise aprovações pendentes ou informe as estimativas necessárias." : "Abra e revise as informações antes da aprovação."}` : "";
-  $("#dragHint").classList.toggle("hidden", !canManage());
-  $("#projectList").innerHTML = projects.length ? projects.map(cardTemplate).join("") : `<div class="empty"><b>Nenhum projeto encontrado.</b><br>O sistema está pronto para receber novas solicitações.</div>`;
-  document.querySelectorAll(".open-project").forEach(btn => btn.onclick = () => openProject(Number(btn.dataset.id)));
-  setupDragging(); renderCalendar();
-}
-function filteredProjects() {
-  const query = $("#searchInput").value.trim().toLowerCase(), stage = $("#stageFilter").value;
-  return state.projects.filter(p => (!stage || p.stage === stage) && (!query || [p.title,p.requester,p.area].join(" ").toLowerCase().includes(query)));
-}
-function cardTemplate(p) {
-  const priorityClass = p.priority === "Crítica" ? "critical" : p.priority === "Alta" ? "high" : "";
-  return `<article class="project-card" draggable="${canManage() && p.stage === "workflow"}" data-id="${p.id}">
-    <div class="drag-handle">${canManage() && p.stage === "workflow" ? "⠿" : "·"}</div>
-    <div class="project-main"><h3>${esc(p.title)}</h3><p>${esc(p.requester || "Solicitante não informado")}${p.area ? ` · ${esc(p.area)}` : ""}</p></div>
-    <div class="meta"><span>Etapa</span><b>${esc(stageLabels[p.stage])}</b></div>
-    <div class="meta optional-meta"><span>Prazo</span><b>${formatDate(p.due_date)}</b><span>${dueState(p)}</span></div>
-    <span class="pill ${priorityClass}">${esc(p.priority)}</span>
-    <button class="open-project" data-id="${p.id}" aria-label="Abrir projeto">→</button>
-  </article>`;
-}
-
-function setupDragging() {
-  let dragged = null;
-  document.querySelectorAll('.project-card[draggable="true"]').forEach(card => {
-    card.ondragstart = () => { dragged = card; card.classList.add("dragging"); };
-    card.ondragend = async () => { card.classList.remove("dragging"); if (!dragged) return; dragged = null; await saveOrder(); };
-    card.ondragover = e => { e.preventDefault(); if (!dragged || card === dragged) return; const box = card.getBoundingClientRect(); card.parentNode.insertBefore(dragged, e.clientY < box.top + box.height / 2 ? card : card.nextSibling); };
-  });
-}
-async function saveOrder() {
-  const ids = [...document.querySelectorAll('.project-card[draggable="true"]')].map(el => Number(el.dataset.id));
-  const results = await Promise.all(ids.map((id, index) => supabase.from("fluxo_projects").update({ position: index + 1 }).eq("id", id)));
-  if (results.some(r => r.error)) toast("Não foi possível salvar a nova ordem.", true); else toast("Ordem de prioridade atualizada.");
-  await loadData();
-}
-
-function field(label, name, value, type = "text", options = "", disabled = false) {
-  if (type === "textarea") return `<label class="span-2">${label}<textarea name="${name}" rows="3" ${disabled ? "disabled" : ""}>${esc(value)}</textarea></label>`;
-  if (type === "select") return `<label>${label}<select name="${name}" ${disabled ? "disabled" : ""}>${options}</select></label>`;
-  return `<label>${label}<input name="${name}" type="${type}" value="${esc(value ?? "")}" ${disabled ? "disabled" : ""}></label>`;
-}
-function openProject(id) {
-  const p = state.projects.find(item => item.id === id); if (!p) return;
-  state.openId = id; const editableReview = isManager() && p.stage === "pending_approval";
-  const readOnly = !editableReview;
-  $("#projectModalOverline").textContent = stageLabels[p.stage]; $("#projectModalTitle").textContent = p.title;
-  $("#projectFields").innerHTML = field("Título", "title", p.title, "text", "", readOnly) + field("Solicitante", "requester", p.requester, "text", "", readOnly) + field("Área", "area", p.area, "text", "", readOnly) + field("Descrição", "description", p.description, "textarea", "", readOnly) + field("Impacto", "impact", p.impact, "textarea", "", readOnly) + field("Prioridade", "priority", p.priority, "select", ["Baixa","Média","Alta","Crítica"].map(v => `<option ${v===p.priority?"selected":""}>${v}</option>`).join(""), readOnly) + field("Prazo previsto", "due_date", p.due_date, "date", "", readOnly);
-  $("#projectSaveBtn").classList.toggle("hidden", !editableReview);
-  $("#projectSaveBtn").textContent = "Revisar e aprovar";
-  $("#projectExtra").innerHTML = extrasTemplate(p);
-  wireExtras(p); $("#projectDialog").showModal();
-}
-function extrasTemplate(p) {
-  const projectLogs = state.logs.filter(l => l.project_id === p.id), files = state.attachments.filter(a => a.project_id === p.id);
-  const designerEstimate = ["designer","admin"].includes(state.profile.role) && p.stage === "awaiting_estimate" ? `<div class="detail-block"><h3>Estimativa do projetista</h3><form id="estimateForm" class="inline-form"><input name="hours" type="number" min="1" required placeholder="Horas previstas"><button class="button primary">Liberar no fluxo</button></form></div>` : "";
-  const statusControl = canManage() && p.stage === "workflow" ? `<div class="detail-block"><h3>Andamento</h3><form id="statusForm" class="form-grid"><label>Status<select name="status">${["Aprovado","Em desenvolvimento","Aguardando informações","Em validação","Concluído"].map(v=>`<option ${v===p.status?"selected":""}>${v}</option>`).join("")}</select></label><label>Progresso (%)<input name="progress" type="number" min="0" max="100" value="${p.progress}"></label><div class="span-2"><button class="button ghost">Atualizar andamento</button></div></form></div>` : "";
-  const logForm = ["designer","admin"].includes(state.profile.role) ? `<form id="logForm" class="inline-form"><input name="message" maxlength="1000" required placeholder="Informação aguardada ou próxima etapa"><button class="button primary">Adicionar</button></form>` : "";
-  const attachmentForm = canManage() ? `<form id="attachmentForm" class="inline-form"><input name="file" type="file" accept="application/pdf,.pdf" required><button class="button ghost">Anexar PDF</button></form>` : "";
-  return `<div class="detail-block"><h3>Planejamento</h3><p><b>${p.estimated_hours ? `${p.estimated_hours} hora(s) previstas` : "Horas ainda não informadas"}</b> · ${esc(p.status)} · ${p.progress}%</p></div>${designerEstimate}${statusControl}<div class="detail-block"><h3>Acompanhamento</h3>${logForm}<div class="log-list">${projectLogs.length ? projectLogs.map(l=>`<div class="log-item">${esc(l.message)}<small>${esc(l.author_name)} · ${formatDateTime(l.created_at)}</small></div>`).join("") : `<small>Nenhum registro de acompanhamento.</small>`}</div></div><div class="detail-block"><h3>Arquivos PDF</h3>${attachmentForm}<div class="attachment-list">${files.length ? files.map(a=>`<button type="button" class="attachment-item open-file" data-path="${esc(a.object_path)}">📄 ${esc(a.file_name)}</button>`).join("") : `<small>Nenhum arquivo anexado.</small>`}</div></div>`;
-}
-function wireExtras(p) {
-  $("#estimateForm")?.addEventListener("submit", async e => { e.preventDefault(); const hours=Number(new FormData(e.currentTarget).get("hours")); const {error}=await supabase.from("fluxo_projects").update({estimated_hours:hours,stage:"workflow"}).eq("id",p.id); if(error)return toast(error.message,true); toast("Estimativa registrada e projeto liberado."); $("#projectDialog").close(); await loadData(); });
-  $("#statusForm")?.addEventListener("submit", async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.currentTarget)); const progress=Number(d.progress); const {error}=await supabase.from("fluxo_projects").update({status:d.status,progress:d.status==="Concluído"?100:progress}).eq("id",p.id); if(error)return toast(error.message,true); toast("Andamento atualizado."); $("#projectDialog").close(); await loadData(); });
-  $("#logForm")?.addEventListener("submit", async e => { e.preventDefault(); const message=new FormData(e.currentTarget).get("message"); const {error}=await supabase.from("fluxo_logs").insert({project_id:p.id,message,author_id:state.session.user.id,author_name:state.profile.display_name}); if(error)return toast(error.message,true); toast("Registro adicionado."); await loadData(); openProject(p.id); });
-  $("#attachmentForm")?.addEventListener("submit", async e => { e.preventDefault(); const file=new FormData(e.currentTarget).get("file"); if(!file||file.type!=="application/pdf")return toast("Selecione um arquivo PDF.",true); if(file.size>8388608)return toast("O PDF deve ter no máximo 8 MB.",true); const path=`${p.id}/${crypto.randomUUID()}.pdf`; const upload=await supabase.storage.from("fluxo-project-pdfs").upload(path,file,{contentType:"application/pdf"}); if(upload.error)return toast(upload.error.message,true); const meta=await supabase.from("fluxo_attachments").insert({project_id:p.id,object_path:path,file_name:file.name,size_bytes:file.size,uploaded_by:state.session.user.id}); if(meta.error){await supabase.storage.from("fluxo-project-pdfs").remove([path]);return toast(meta.error.message,true)} toast("PDF anexado."); await loadData(); openProject(p.id); });
-  document.querySelectorAll(".open-file").forEach(btn=>btn.onclick=async()=>{const {data,error}=await supabase.storage.from("fluxo-project-pdfs").createSignedUrl(btn.dataset.path,120);if(error)return toast(error.message,true);window.open(data.signedUrl,"_blank","noopener")});
-}
-
-function renderCalendar() {
-  const date = state.calendarDate, year = date.getFullYear(), month = date.getMonth();
-  $("#calendarTitle").textContent = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(date);
-  const first = new Date(year, month, 1), start = new Date(year, month, 1 - first.getDay());
-  const cells=[]; for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const iso=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");const items=state.projects.filter(p=>p.due_date===iso&&p.stage!=="rejected");cells.push(`<div class="day ${d.getMonth()!==month?"muted":""}"><b>${d.getDate()}</b>${items.map(p=>`<button class="calendar-project open-project" data-id="${p.id}" title="${esc(p.title)}">${esc(p.title)}</button>`).join("")}</div>`)}
-  $("#calendarGrid").innerHTML=cells.join(""); document.querySelectorAll("#calendarGrid .open-project").forEach(btn=>btn.onclick=()=>openProject(Number(btn.dataset.id)));
-}
-
-async function establishSession(session) {
-  state.session = session;
-  if (!session) { state.profile=null; $("#publicView").classList.remove("hidden"); $("#appView").classList.add("hidden"); $("#loginBtn").classList.remove("hidden"); $("#logoutBtn").classList.add("hidden"); $("#userBadge").classList.add("hidden"); return; }
-  const {data,error}=await supabase.from("fluxo_profiles").select("*").eq("user_id",session.user.id).single();
-  if(error||!data){await supabase.auth.signOut();return toast("Este usuário não possui acesso ao sistema.",true)}
-  state.profile=data; $("#publicView").classList.add("hidden"); $("#appView").classList.remove("hidden"); $("#loginBtn").classList.add("hidden"); $("#logoutBtn").classList.remove("hidden"); $("#userBadge").classList.remove("hidden"); $("#userBadge").textContent=data.display_name; $("#roleTitle").textContent=labels[data.role]; $("#newInternalBtn").classList.toggle("hidden",!["engineering","production","designer","admin"].includes(data.role));
-  await loadData();
-}
-
-$("#requestForm").addEventListener("submit", e => { e.preventDefault(); submitRequest(e.currentTarget); });
-$("#internalForm").addEventListener("submit", e => { e.preventDefault(); submitRequest(e.currentTarget, $("#newDialog")); });
-$("#loginBtn").onclick=()=>$("#loginDialog").showModal();
-$("#logoutBtn").onclick=async()=>{const {error}=await supabase.auth.signOut();if(error)return toast("Não foi possível encerrar a sessão.",true);await establishSession(null);toast("Sessão encerrada.")};
-$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget;const button=form.querySelector('.primary');setBusy(button,true,"Entrando…");const d=Object.fromEntries(new FormData(form));const username=d.username.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");const {error}=await supabase.auth.signInWithPassword({email:`${username}@fluxo.local`,password:d.password});setBusy(button,false);if(error)return toast("Usuário ou senha inválidos.",true);form.reset();$("#loginDialog").close()});
-$("#projectForm").addEventListener("submit",async e=>{e.preventDefault();const p=state.projects.find(x=>x.id===state.openId);if(!p||!isManager()||p.stage!=="pending_approval")return;const button=$("#projectSaveBtn");setBusy(button,true,"Aprovando…");const d=Object.fromEntries(new FormData(e.currentTarget));const {error}=await supabase.from("fluxo_projects").update({title:d.title,requester:d.requester,area:d.area,description:d.description,impact:d.impact,priority:d.priority,due_date:d.due_date,stage:"awaiting_estimate"}).eq("id",p.id);setBusy(button,false);if(error)return toast(error.message,true);toast("Informações revisadas. Projeto enviado ao projetista.");$("#projectDialog").close();await loadData()});
-$("#newInternalBtn").onclick=()=>$("#newDialog").showModal(); $("#refreshBtn").onclick=loadData;
-$("#searchInput").oninput=render; $("#stageFilter").onchange=render;
-document.querySelectorAll(".nav-item[data-view]").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".nav-item[data-view]").forEach(b=>b.classList.toggle("active",b===btn));const calendar=btn.dataset.view==="calendar";$("#dashboardView").classList.toggle("hidden",calendar);$("#calendarView").classList.toggle("hidden",!calendar);$("#stats").classList.toggle("hidden",calendar);$("#pageTitle").textContent=calendar?"Calendário de vencimentos":"Painel de projetos";$("#pageSubtitle").textContent=calendar?"Projetos organizados pela data de entrega.":"Uma visão clara do trabalho em andamento.";});
-$("#prevMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()-1,1);renderCalendar()};
-$("#nextMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()+1,1);renderCalendar()};
-document.querySelectorAll('input[type="date"]').forEach(input=>input.min=isoToday());
-
-supabase.auth.onAuthStateChange((_event,session)=>setTimeout(()=>establishSession(session),0));
-const {data:{session}}=await supabase.auth.getSession(); await establishSession(session);
+$("#requestForm").addEventListener("submit",e=>{e.preventDefault();submitRequest(e.currentTarget)});$("#internalForm").addEventListener("submit",e=>{e.preventDefault();submitRequest(e.currentTarget,$("#newDialog"))});$("#loginBtn").onclick=()=>$("#loginDialog").showModal();$("#logoutBtn").onclick=async()=>{const{error}=await supabase.auth.signOut();if(error)return errorMessage(error);await establishSession(null);toast("Sessão encerrada.")};
+$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,b=form.querySelector(".primary"),d=Object.fromEntries(new FormData(form)),u=d.username.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");setBusy(b,true,"Entrando…");const{error}=await supabase.auth.signInWithPassword({email:`${u}@fluxo.local`,password:d.password});setBusy(b,false);if(error)return toast("Usuário ou senha inválidos.",true);form.reset();$("#loginDialog").close()});
+$("#projectForm").addEventListener("submit",async e=>{e.preventDefault();const p=state.projects.find(x=>x.id===state.openId);if(!p||!canEdit())return;const form=e.currentTarget,b=$("#projectSaveBtn"),d=Object.fromEntries(new FormData(form)),payload={title:d.title,requester:d.requester||"",area:d.area||"",description:d.description,impact:d.impact||"",priority:d.priority,due_date:d.due_date};if(p.stage==="pending_approval")payload.stage="awaiting_estimate";setBusy(b,true,p.stage==="pending_approval"?"Aprovando…":"Salvando…");const{error}=await supabase.from("fluxo_projects").update(payload).eq("id",p.id);setBusy(b,false);if(error)return errorMessage(error);toast(p.stage==="pending_approval"?"Projeto revisado e enviado para estimativa.":"Projeto atualizado.");$("#projectDialog").close();await loadData()});
+$("#deleteProjectBtn").onclick=deleteOpenProject;$("#projectCloseBtn").onclick=()=>$("#projectDialog").close();$("#projectCloseX").onclick=()=>$("#projectDialog").close();$("#newInternalBtn").onclick=()=>$("#newDialog").showModal();$("#refreshBtn").onclick=loadData;$("#searchInput").oninput=renderQueue;$("#stageFilter").onchange=renderQueue;document.querySelectorAll(".nav-item[data-view]").forEach(b=>b.onclick=()=>switchView(b.dataset.view));$("#prevMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()-1,1);renderCalendar()};$("#nextMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()+1,1);renderCalendar()};document.querySelectorAll('input[type="date"]').forEach(i=>i.min=today());
+supabase.auth.onAuthStateChange((_event,session)=>setTimeout(()=>establishSession(session),0));const{data:{session}}=await supabase.auth.getSession();await establishSession(session);

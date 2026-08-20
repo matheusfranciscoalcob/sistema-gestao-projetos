@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="approved.css?v=1">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -48,7 +49,9 @@
       <aside class="sidebar">
         <div><span class="overline">PAINEL DA EQUIPE</span><h2 id="roleTitle">Visão geral</h2></div>
         <nav>
-          <button class="nav-item active" data-view="dashboard">▦ <span>Painel</span></button>
+          <button class="nav-item active" data-view="dashboard">▦ <span>Prioridades</span></button>
+          <button id="pendingNav" class="nav-item" data-view="pending">⚑ <span>Pendências</span><b id="pendingBadge" class="nav-badge hidden">0</b></button>
+          <button class="nav-item" data-view="kanban">▤ <span>Kanban</span></button>
           <button class="nav-item" data-view="calendar">□ <span>Calendário</span></button>
           <button id="newInternalBtn" class="nav-item">＋ <span>Nova solicitação</span></button>
         </nav>
@@ -63,6 +66,14 @@
           <div class="section-title"><div><span class="overline">FILA DE PRIORIDADE</span><h2>Projetos</h2></div><span id="dragHint" class="hint">Arraste os cartões para reordenar</span></div>
           <div id="projectList" class="project-list"></div>
         </section>
+        <section id="pendingView" class="hidden">
+          <div class="section-title"><div><span class="overline">AÇÕES NECESSÁRIAS</span><h2 id="pendingTitle">Pendências</h2></div><span class="hint">Abra o projeto para concluir a ação</span></div>
+          <div id="pendingList" class="project-list"></div>
+        </section>
+        <section id="kanbanView" class="hidden">
+          <div class="section-title"><div><span class="overline">FLUXO DE EXECUÇÃO</span><h2>Quadro Kanban</h2></div><span class="hint">Use “Avançar fase” nos cartões</span></div>
+          <div id="kanbanBoard" class="kanban-board"></div>
+        </section>
         <section id="calendarView" class="hidden"><div class="calendar-head"><button id="prevMonth" class="icon-button">←</button><h2 id="calendarTitle"></h2><button id="nextMonth" class="icon-button">→</button></div><div class="weekdays"><span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span></div><div id="calendarGrid" class="calendar-grid"></div></section>
       </div>
     </section>
@@ -70,10 +81,10 @@
 
   <dialog id="loginDialog"><form id="loginForm" method="dialog" class="modal"><button class="close" value="cancel" aria-label="Fechar">×</button><span class="overline">ÁREA RESTRITA</span><h2>Acesso da equipe</h2><p>Entre com o usuário e a senha fornecidos pela administração.</p><label>Usuário<input name="username" required autocomplete="username"></label><label>Senha<input name="password" type="password" required autocomplete="current-password"></label><button class="button primary full" value="default">Entrar</button></form></dialog>
 
-  <dialog id="projectDialog"><form id="projectForm" method="dialog" class="modal wide"><button class="close" value="cancel" aria-label="Fechar">×</button><span id="projectModalOverline" class="overline">PROJETO</span><h2 id="projectModalTitle">Detalhes do projeto</h2><div id="projectFields" class="form-grid"></div><div id="projectExtra"></div><div class="modal-actions"><button class="button ghost" value="cancel">Fechar</button><button id="projectSaveBtn" class="button primary" value="default">Salvar</button></div></form></dialog>
+  <dialog id="projectDialog"><div class="modal wide"><button id="projectCloseX" class="close" type="button" aria-label="Fechar">×</button><span id="projectModalOverline" class="overline">PROJETO</span><h2 id="projectModalTitle">Detalhes do projeto</h2><form id="projectForm"><div id="projectFields" class="form-grid"></div><div class="modal-actions"><button id="deleteProjectBtn" class="button danger hidden" type="button">Excluir projeto</button><span class="action-spacer"></span><button id="projectCloseBtn" class="button ghost" type="button">Fechar</button><button id="projectSaveBtn" class="button primary" type="submit">Salvar alterações</button></div></form><div id="projectExtra"></div></div></dialog>
 
   <dialog id="newDialog"><form id="internalForm" method="dialog" class="modal wide"><button class="close" value="cancel">×</button><span class="overline">SOLICITAÇÃO INTERNA</span><h2>Novo projeto</h2><div class="form-grid"><label class="span-2">Título *<input name="title" required maxlength="120"></label><label>Solicitante<input name="requester" maxlength="100"></label><label>Área<input name="area" maxlength="100"></label><label class="span-2">Descrição *<textarea name="description" required rows="4" maxlength="2000"></textarea></label><label class="span-2">Impacto<textarea name="impact" rows="2" maxlength="1000"></textarea></label><label>Prioridade *<select name="priority"><option>Baixa</option><option selected>Média</option><option>Alta</option><option>Crítica</option></select></label><label>Prazo *<input name="due_date" type="date" required></label></div><div class="modal-actions"><button class="button ghost" value="cancel">Cancelar</button><button class="button primary" value="default">Criar projeto</button></div></form></dialog>
 
-  <script type="module" src="app.js?v=3"></script>
+  <script type="module" src="app.js?v=4"></script>
 </body>
 </html>
