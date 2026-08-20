@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Fluxo de Projetos — solicitações, aprovações, prioridades e acompanhamento.">
+  <title>Fluxo de Projetos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Início"><span class="brand-mark">FP</span><span>Fluxo de <b>Projetos</b></span></a>
+    <div class="top-actions">
+      <span id="userBadge" class="user-badge hidden"></span>
+      <button id="loginBtn" class="button ghost">Acesso da equipe</button>
+      <button id="logoutBtn" class="button ghost hidden">Sair</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="publicView" class="public-shell">
+      <div class="hero">
+        <span class="eyebrow">SOLICITAÇÃO DE PROJETO</span>
+        <h1>Transforme uma necessidade em um projeto bem organizado.</h1>
+        <p>Registre a demanda. Engenharia ou Produção revisará as informações antes de encaminhá-la ao projetista.</p>
+        <div class="hero-steps"><span><b>1</b> Solicitação</span><span><b>2</b> Revisão</span><span><b>3</b> Estimativa</span><span><b>4</b> Execução</span></div>
+      </div>
+      <form id="requestForm" class="panel request-card">
+        <div class="panel-heading"><div><span class="overline">NOVA DEMANDA</span><h2>Conte o que precisa ser desenvolvido</h2></div><span class="required-note">* obrigatórios</span></div>
+        <div class="form-grid">
+          <label class="span-2">Título do projeto *<input name="title" required maxlength="120" placeholder="Ex.: Adequação do dispositivo da linha 2"></label>
+          <label>Solicitante <input name="requester" maxlength="100" placeholder="Nome (opcional)"></label>
+          <label>Área de implementação <input name="area" maxlength="100" placeholder="Área (opcional)"></label>
+          <label class="span-2">Descrição da necessidade *<textarea name="description" required rows="4" maxlength="2000" placeholder="Explique a necessidade, o objetivo e os requisitos conhecidos."></textarea></label>
+          <label class="span-2">Impacto esperado <textarea name="impact" rows="2" maxlength="1000" placeholder="Ex.: ganho de produtividade, segurança ou qualidade."></textarea></label>
+          <label>Prioridade sugerida *<select name="priority" required><option>Baixa</option><option selected>Média</option><option>Alta</option><option>Crítica</option></select></label>
+          <label>Prazo necessário *<input name="due_date" type="date" required></label>
+        </div>
+        <div class="form-footer"><small>O prazo e a prioridade poderão ser ajustados pelo gestor durante a aprovação.</small><button class="button primary" type="submit">Enviar solicitação</button></div>
+      </form>
+    </section>
+
+    <section id="appView" class="app-shell hidden">
+      <aside class="sidebar">
+        <div><span class="overline">PAINEL DA EQUIPE</span><h2 id="roleTitle">Visão geral</h2></div>
+        <nav>
+          <button class="nav-item active" data-view="dashboard">▦ <span>Painel</span></button>
+          <button class="nav-item" data-view="calendar">□ <span>Calendário</span></button>
+          <button id="newInternalBtn" class="nav-item">＋ <span>Nova solicitação</span></button>
+        </nav>
+        <div class="sidebar-note"><b>Fluxo único</b><span>Alterações de prioridade ficam visíveis para toda a equipe.</span></div>
+      </aside>
+      <div class="workspace">
+        <div class="workspace-head"><div><span id="pageEyebrow" class="overline">ACOMPANHAMENTO</span><h1 id="pageTitle">Painel de projetos</h1><p id="pageSubtitle">Uma visão clara do trabalho em andamento.</p></div><button id="refreshBtn" class="icon-button" title="Atualizar">↻</button></div>
+        <div id="stats" class="stats"></div>
+        <section id="alertBox" class="alert hidden"></section>
+        <section id="dashboardView">
+          <div class="filters"><input id="searchInput" type="search" placeholder="Buscar projeto, solicitante ou área"><select id="stageFilter"><option value="">Todas as etapas</option><option value="pending_approval">Aguardando aprovação</option><option value="awaiting_estimate">Aguardando estimativa</option><option value="workflow">Em fluxo</option><option value="rejected">Recusados</option></select></div>
+          <div class="section-title"><div><span class="overline">FILA DE PRIORIDADE</span><h2>Projetos</h2></div><span id="dragHint" class="hint">Arraste os cartões para reordenar</span></div>
+          <div id="projectList" class="project-list"></div>
+        </section>
+        <section id="calendarView" class="hidden"><div class="calendar-head"><button id="prevMonth" class="icon-button">←</button><h2 id="calendarTitle"></h2><button id="nextMonth" class="icon-button">→</button></div><div class="weekdays"><span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span></div><div id="calendarGrid" class="calendar-grid"></div></section>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="loginDialog"><form id="loginForm" method="dialog" class="modal"><button class="close" value="cancel" aria-label="Fechar">×</button><span class="overline">ÁREA RESTRITA</span><h2>Acesso da equipe</h2><p>Entre com o usuário e a senha fornecidos pela administração.</p><label>Usuário<input name="username" required autocomplete="username"></label><label>Senha<input name="password" type="password" required autocomplete="current-password"></label><button class="button primary full" value="default">Entrar</button></form></dialog>
+
+  <dialog id="projectDialog"><form id="projectForm" method="dialog" class="modal wide"><button class="close" value="cancel" aria-label="Fechar">×</button><span id="projectModalOverline" class="overline">PROJETO</span><h2 id="projectModalTitle">Detalhes do projeto</h2><div id="projectFields" class="form-grid"></div><div id="projectExtra"></div><div class="modal-actions"><button class="button ghost" value="cancel">Fechar</button><button id="projectSaveBtn" class="button primary" value="default">Salvar</button></div></form></dialog>
+
+  <dialog id="newDialog"><form id="internalForm" method="dialog" class="modal wide"><button class="close" value="cancel">×</button><span class="overline">SOLICITAÇÃO INTERNA</span><h2>Novo projeto</h2><div class="form-grid"><label class="span-2">Título *<input name="title" required maxlength="120"></label><label>Solicitante<input name="requester" maxlength="100"></label><label>Área<input name="area" maxlength="100"></label><label class="span-2">Descrição *<textarea name="description" required rows="4" maxlength="2000"></textarea></label><label class="span-2">Impacto<textarea name="impact" rows="2" maxlength="1000"></textarea></label><label>Prioridade *<select name="priority"><option>Baixa</option><option selected>Média</option><option>Alta</option><option>Crítica</option></select></label><label>Prazo *<input name="due_date" type="date" required></label></div><div class="modal-actions"><button class="button ghost" value="cancel">Cancelar</button><button class="button primary" value="default">Criar projeto</button></div></form></dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
