@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="approved.css?v=2">
+  <link rel="stylesheet" href="approved.css?v=3">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -35,11 +35,12 @@
         <div class="form-grid">
           <label class="span-2">Título do projeto *<input name="title" required maxlength="120" placeholder="Ex.: Adequação do dispositivo da linha 2"></label>
           <label>Solicitante <input name="requester" maxlength="100" placeholder="Nome (opcional)"></label>
-          <label>Área de implementação <input name="area" maxlength="100" placeholder="Área (opcional)"></label>
+          <label>Setor de implementação <select name="area"><option value="">Selecione (opcional)</option><option>01 - Prensa</option><option>02 - Fornos</option><option>03 - Rodo de Moldagem</option><option>04 - Mesa de Preparação para Barras</option><option>05 - Laminador</option><option>06 - Decapagem</option><option>07 - Bobinador</option><option>08 - Embalagem</option><option>09 - Manutenção</option><option>10 - Layouts</option><option>11 - Utilidades</option><option>12 - Lixador de Faces</option><option>50 - Trefila</option></select></label>
           <label class="span-2">Descrição da necessidade *<textarea name="description" required rows="4" maxlength="2000" placeholder="Explique a necessidade, o objetivo e os requisitos conhecidos."></textarea></label>
           <label class="span-2">Impacto esperado <textarea name="impact" rows="2" maxlength="1000" placeholder="Ex.: ganho de produtividade, segurança ou qualidade."></textarea></label>
           <label>Prioridade sugerida *<select name="priority" required><option>Baixa</option><option selected>Média</option><option>Alta</option><option>Crítica</option></select></label>
           <label>Prazo necessário *<input name="due_date" type="date" required></label>
+          <label class="span-2">Imagens ou PDFs <input name="files" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"><small>Opcional · até 5 arquivos de 8 MB cada.</small></label>
         </div>
         <div class="form-footer"><small>O prazo e a prioridade poderão ser ajustados pelo gestor durante a aprovação.</small><button class="button primary" type="submit">Enviar solicitação</button></div>
       </form>
@@ -83,8 +84,8 @@
 
   <dialog id="projectDialog"><div class="modal wide"><button id="projectCloseX" class="close" type="button" aria-label="Fechar">×</button><span id="projectModalOverline" class="overline">PROJETO</span><h2 id="projectModalTitle">Detalhes do projeto</h2><form id="projectForm"><div id="projectFields" class="form-grid"></div><div class="modal-actions"><button id="deleteProjectBtn" class="button danger hidden" type="button">Excluir projeto</button><span class="action-spacer"></span><button id="projectCloseBtn" class="button ghost" type="button">Fechar</button><button id="projectSaveBtn" class="button primary" type="submit">Salvar alterações</button></div></form><div id="projectExtra"></div></div></dialog>
 
-  <dialog id="newDialog"><form id="internalForm" method="dialog" class="modal wide"><button class="close" value="cancel">×</button><span class="overline">SOLICITAÇÃO INTERNA</span><h2>Novo projeto</h2><div class="form-grid"><label class="span-2">Título *<input name="title" required maxlength="120"></label><label>Solicitante<input name="requester" maxlength="100"></label><label>Área<input name="area" maxlength="100"></label><label class="span-2">Descrição *<textarea name="description" required rows="4" maxlength="2000"></textarea></label><label class="span-2">Impacto<textarea name="impact" rows="2" maxlength="1000"></textarea></label><label>Prioridade *<select name="priority"><option>Baixa</option><option selected>Média</option><option>Alta</option><option>Crítica</option></select></label><label>Prazo *<input name="due_date" type="date" required></label></div><div class="modal-actions"><button class="button ghost" value="cancel">Cancelar</button><button class="button primary" value="default">Criar projeto</button></div></form></dialog>
+  <dialog id="newDialog"><form id="internalForm" method="dialog" class="modal wide"><button class="close" value="cancel">×</button><span class="overline">SOLICITAÇÃO INTERNA</span><h2>Novo projeto</h2><div class="form-grid"><label class="span-2">Título *<input name="title" required maxlength="120"></label><label>Solicitante<input name="requester" maxlength="100"></label><label>Setor<select name="area"><option value="">Selecione (opcional)</option><option>01 - Prensa</option><option>02 - Fornos</option><option>03 - Rodo de Moldagem</option><option>04 - Mesa de Preparação para Barras</option><option>05 - Laminador</option><option>06 - Decapagem</option><option>07 - Bobinador</option><option>08 - Embalagem</option><option>09 - Manutenção</option><option>10 - Layouts</option><option>11 - Utilidades</option><option>12 - Lixador de Faces</option><option>50 - Trefila</option></select></label><label class="span-2">Descrição *<textarea name="description" required rows="4" maxlength="2000"></textarea></label><label class="span-2">Impacto<textarea name="impact" rows="2" maxlength="1000"></textarea></label><label>Prioridade *<select name="priority"><option>Baixa</option><option selected>Média</option><option>Alta</option><option>Crítica</option></select></label><label>Prazo *<input name="due_date" type="date" required></label><label class="span-2">Imagens ou PDFs<input name="files" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"><small>Opcional · até 5 arquivos de 8 MB cada.</small></label></div><div class="modal-actions"><button class="button ghost" value="cancel">Cancelar</button><button class="button primary" value="default">Criar projeto</button></div></form></dialog>
 
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>
