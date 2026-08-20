@@ -8,11 +8,11 @@ const $ = (selector) => document.querySelector(selector);
 const state = { session: null, profile: null, projects: [], logs: [], attachments: [], calendarDate: new Date(), openId: null };
 const labels = {
   engineering: "Gestor de Engenharia", production: "Gestor de Produção", designer: "Projetista",
-  maintenance: "Manutenção · visualização", director: "Diretoria · visualização"
+  maintenance: "Manutenção · visualização", director: "Diretoria · visualização", admin: "Administrador · acesso total"
 };
 const stageLabels = { pending_approval: "Aguardando aprovação", awaiting_estimate: "Aguardando estimativa", workflow: "Em fluxo", rejected: "Recusado" };
-const canManage = () => ["engineering", "production", "designer"].includes(state.profile?.role);
-const isManager = () => ["engineering", "production"].includes(state.profile?.role);
+const canManage = () => ["engineering", "production", "designer", "admin"].includes(state.profile?.role);
+const isManager = () => ["engineering", "production", "admin"].includes(state.profile?.role);
 const esc = (value = "") => String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
 const isoToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const formatDate = (date) => date ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`)) : "—";
@@ -66,9 +66,9 @@ function render() {
     late: state.projects.filter(p => p.stage === "workflow" && p.status !== "Concluído" && new Date(`${p.due_date}T23:59:59`) < new Date()).length
   };
   $("#stats").innerHTML = [["Aguardando aprovação",counts.pending],["Sem estimativa",counts.estimate],["Em andamento",counts.active],["Em atraso",counts.late]].map(([l,n]) => `<div class="stat"><span>${l}</span><b>${n}</b></div>`).join("");
-  const needs = state.profile?.role === "designer" ? counts.estimate : isManager() ? counts.pending : 0;
+  const needs = state.profile?.role === "admin" ? counts.pending + counts.estimate : state.profile?.role === "designer" ? counts.estimate : isManager() ? counts.pending : 0;
   $("#alertBox").classList.toggle("hidden", !needs);
-  $("#alertBox").innerHTML = needs ? `<b>${needs} ${needs === 1 ? "projeto precisa" : "projetos precisam"} da sua atenção.</b> ${state.profile.role === "designer" ? "Informe as horas previstas para liberar no fluxo." : "Abra e revise as informações antes da aprovação."}` : "";
+  $("#alertBox").innerHTML = needs ? `<b>${needs} ${needs === 1 ? "projeto precisa" : "projetos precisam"} da sua atenção.</b> ${state.profile.role === "designer" ? "Informe as horas previstas para liberar no fluxo." : state.profile.role === "admin" ? "Revise aprovações pendentes ou informe as estimativas necessárias." : "Abra e revise as informações antes da aprovação."}` : "";
   $("#dragHint").classList.toggle("hidden", !canManage());
   $("#projectList").innerHTML = projects.length ? projects.map(cardTemplate).join("") : `<div class="empty"><b>Nenhum projeto encontrado.</b><br>O sistema está pronto para receber novas solicitações.</div>`;
   document.querySelectorAll(".open-project").forEach(btn => btn.onclick = () => openProject(Number(btn.dataset.id)));
@@ -123,9 +123,9 @@ function openProject(id) {
 }
 function extrasTemplate(p) {
   const projectLogs = state.logs.filter(l => l.project_id === p.id), files = state.attachments.filter(a => a.project_id === p.id);
-  const designerEstimate = state.profile.role === "designer" && p.stage === "awaiting_estimate" ? `<div class="detail-block"><h3>Estimativa do projetista</h3><form id="estimateForm" class="inline-form"><input name="hours" type="number" min="1" required placeholder="Horas previstas"><button class="button primary">Liberar no fluxo</button></form></div>` : "";
+  const designerEstimate = ["designer","admin"].includes(state.profile.role) && p.stage === "awaiting_estimate" ? `<div class="detail-block"><h3>Estimativa do projetista</h3><form id="estimateForm" class="inline-form"><input name="hours" type="number" min="1" required placeholder="Horas previstas"><button class="button primary">Liberar no fluxo</button></form></div>` : "";
   const statusControl = canManage() && p.stage === "workflow" ? `<div class="detail-block"><h3>Andamento</h3><form id="statusForm" class="form-grid"><label>Status<select name="status">${["Aprovado","Em desenvolvimento","Aguardando informações","Em validação","Concluído"].map(v=>`<option ${v===p.status?"selected":""}>${v}</option>`).join("")}</select></label><label>Progresso (%)<input name="progress" type="number" min="0" max="100" value="${p.progress}"></label><div class="span-2"><button class="button ghost">Atualizar andamento</button></div></form></div>` : "";
-  const logForm = state.profile.role === "designer" ? `<form id="logForm" class="inline-form"><input name="message" maxlength="1000" required placeholder="Informação aguardada ou próxima etapa"><button class="button primary">Adicionar</button></form>` : "";
+  const logForm = ["designer","admin"].includes(state.profile.role) ? `<form id="logForm" class="inline-form"><input name="message" maxlength="1000" required placeholder="Informação aguardada ou próxima etapa"><button class="button primary">Adicionar</button></form>` : "";
   const attachmentForm = canManage() ? `<form id="attachmentForm" class="inline-form"><input name="file" type="file" accept="application/pdf,.pdf" required><button class="button ghost">Anexar PDF</button></form>` : "";
   return `<div class="detail-block"><h3>Planejamento</h3><p><b>${p.estimated_hours ? `${p.estimated_hours} hora(s) previstas` : "Horas ainda não informadas"}</b> · ${esc(p.status)} · ${p.progress}%</p></div>${designerEstimate}${statusControl}<div class="detail-block"><h3>Acompanhamento</h3>${logForm}<div class="log-list">${projectLogs.length ? projectLogs.map(l=>`<div class="log-item">${esc(l.message)}<small>${esc(l.author_name)} · ${formatDateTime(l.created_at)}</small></div>`).join("") : `<small>Nenhum registro de acompanhamento.</small>`}</div></div><div class="detail-block"><h3>Arquivos PDF</h3>${attachmentForm}<div class="attachment-list">${files.length ? files.map(a=>`<button type="button" class="attachment-item open-file" data-path="${esc(a.object_path)}">📄 ${esc(a.file_name)}</button>`).join("") : `<small>Nenhum arquivo anexado.</small>`}</div></div>`;
 }
@@ -150,7 +150,7 @@ async function establishSession(session) {
   if (!session) { state.profile=null; $("#publicView").classList.remove("hidden"); $("#appView").classList.add("hidden"); $("#loginBtn").classList.remove("hidden"); $("#logoutBtn").classList.add("hidden"); $("#userBadge").classList.add("hidden"); return; }
   const {data,error}=await supabase.from("fluxo_profiles").select("*").eq("user_id",session.user.id).single();
   if(error||!data){await supabase.auth.signOut();return toast("Este usuário não possui acesso ao sistema.",true)}
-  state.profile=data; $("#publicView").classList.add("hidden"); $("#appView").classList.remove("hidden"); $("#loginBtn").classList.add("hidden"); $("#logoutBtn").classList.remove("hidden"); $("#userBadge").classList.remove("hidden"); $("#userBadge").textContent=data.display_name; $("#roleTitle").textContent=labels[data.role]; $("#newInternalBtn").classList.toggle("hidden",!["engineering","production","designer"].includes(data.role));
+  state.profile=data; $("#publicView").classList.add("hidden"); $("#appView").classList.remove("hidden"); $("#loginBtn").classList.add("hidden"); $("#logoutBtn").classList.remove("hidden"); $("#userBadge").classList.remove("hidden"); $("#userBadge").textContent=data.display_name; $("#roleTitle").textContent=labels[data.role]; $("#newInternalBtn").classList.toggle("hidden",!["engineering","production","designer","admin"].includes(data.role));
   await loadData();
 }
 
